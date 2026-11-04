@@ -75,6 +75,19 @@ service cloud.firestore {
       }
     }
 
+    // Class currency logo: a small image (resized in the browser) shown on student pages.
+    // Not private, so anyone can view it; only the class owner can change it.
+    match /logos/{classId} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isClassOwner(classId)
+        && request.resource.data.keys().hasOnly(['image', 'updatedAt'])
+        && request.resource.data.image is string
+        && request.resource.data.image.size() < 200000
+        && request.resource.data.image.matches('data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+');
+      allow delete: if isClassOwner(classId);
+    }
+
     match /shares/{code} {
       // Anyone with the exact code can open that one page. Listing/searching is never allowed.
       allow get: if code.size() >= 20;

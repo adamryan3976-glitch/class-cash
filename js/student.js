@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { formatMoney, formatSigned, formatDate, formatDateTime } from "./util.js";
 
@@ -12,14 +12,35 @@ function showError() {
   $("#error").hidden = false;
 }
 
+let db = null;
+let logoFor = null;   // classId whose logo we've loaded
+
 if (code.length < 20) {
   showError();
 } else {
-  const db = getFirestore(initializeApp(firebaseConfig));
+  db = getFirestore(initializeApp(firebaseConfig));
   onSnapshot(doc(db, "shares", code), (snap) => {
     if (!snap.exists()) return showError();
-    render(snap.data());
+    const d = snap.data();
+    render(d);
+    if (d.classId && d.classId !== logoFor) loadLogo(d.classId);
   }, showError);
+}
+
+async function loadLogo(classId) {
+  logoFor = classId;
+  try {
+    const snap = await getDoc(doc(db, "logos", classId));
+    const img = $("#logo");
+    if (snap.exists() && snap.data().image) {
+      img.src = snap.data().image;
+      img.hidden = false;
+      const link = document.querySelector("link[rel=icon]");
+      if (link) link.href = snap.data().image;
+    } else img.hidden = true;
+  } catch (err) {
+    console.warn("Couldn't load class logo", err);
+  }
 }
 
 function render(d) {

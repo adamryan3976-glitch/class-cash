@@ -31,6 +31,7 @@ let classId = null;         // currently open class
 let settings = { ...DEFAULT_SETTINGS };
 let students = [];          // [{ id, displayName, email, token, balance }]
 let transactions = [];      // recent, newest first
+let logo = "";              // current class's currency logo (small data: URL) or ""
 const selected = new Set();
 let classesUnsub = null;
 let dataUnsubs = [];
@@ -44,6 +45,7 @@ const studentRef = (id) => doc(db, "classes", classId, "students", id);
 const studentsCol = () => collection(db, "classes", classId, "students");
 const txCol = () => collection(db, "classes", classId, "transactions");
 const shareRef = (token) => doc(db, "shares", token);
+const logoRef = (id = classId) => doc(db, "logos", id);
 const byId = (id) => students.find((s) => s.id === id);
 const money = (c) => formatMoney(c, settings.symbol);
 const currentClass = () => classes.find((c) => c.id === classId);
@@ -226,8 +228,10 @@ function closeClass() {
   classId = null;
   students = [];
   transactions = [];
+  logo = "";
   selected.clear();
   importData = null;
+  renderLogo();
 }
 
 function openClass(id) {
@@ -246,6 +250,11 @@ function openClass(id) {
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" }));
     for (const sid of [...selected]) if (!byId(sid)) selected.delete(sid);
     renderAll();
+  });
+  listen(thisClass, "logo", () => logoRef(), (snap) => {
+    logo = snap.exists() ? snap.data().image || "" : "";
+    renderLogo();
+    renderBank();
   });
   listen(thisClass, "history", () => query(txCol(), orderBy("t", "desc"), limit(100)), (snap) => {
     transactions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -308,7 +317,7 @@ function renderBank() {
     grid.innerHTML = visibleStudents().map((s) => `
       <button class="card ${selected.has(s.id) ? "selected" : ""} ${s.balance < 0 ? "neg" : ""}" data-id="${esc(s.id)}" aria-pressed="${selected.has(s.id)}">
         <span class="card-name">${esc(s.displayName)}</span>
-        <span class="card-bal">${esc(money(s.balance || 0))}</span>
+        <span class="card-bal">${logo ? `<img class="coin" src="${esc(logo)}" alt="">` : ""}${esc(money(s.balance || 0))}</span>
       </button>`).join("");
   }
   const n = selected.size;
@@ -457,11 +466,10 @@ function renderStudents() {
   const owner = isOwner();
   tbody.innerHTML = students.map((s) => `
     <tr data-id="${esc(s.id)}">
-      <td><strong>${esc(s.displayName)}</strong><div class="muted small">${s.email ? esc(s.email) : "<em>no email</em>"}</div></td>
+      <td><strong>${esc(s.displayName)}</strong><div class="muted small">${s.email ? esc(s.email) : ""}</div></td>
       <td class="num">${esc(money(s.balance || 0))}</td>
       <td class="actions">
         <button class="small" data-act="copy">Copy link</button>
-        <button class="small" data-act="email" ${s.email ? "" : "disabled title='Add an email first'"}>Email link</button>
         <button class="small" data-act="open">Preview</button>
         <details class="more"><summary class="small">More</summary>
           <div class="menu">
@@ -482,7 +490,6 @@ $("#student-rows").addEventListener("click", async (e) => {
   const act = btn.dataset.act;
   if (act === "copy") return copyText(studentLink(s.token), `Copied ${s.displayName}'s link`);
   if (act === "open") return window.open(studentLink(s.token), "_blank", "noopener");
-  if (act === "email") return emailLink(s);
   if (act === "edit") return editStudent(s);
   if (act === "reset") return resetLink(s);
   if (act === "delete") return deleteStudent(s);
@@ -497,26 +504,16 @@ async function copyText(text, msg) {
   }
 }
 
-function gmailCompose(to, subject, body) {
-  const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.open(url, "_blank", "noopener");
-}
-
-function emailLink(s) {
-  gmailCompose(s.email, `Your ${settings.currencyName} balance`,
-    `Hi ${s.displayName},\n\nHere is your private link to check your ${settings.currencyName} balance:\n${studentLink(s.token)}\n\nPlease don't share this link with anyone else. Bookmark it so you can check your balance any time.\n`);
-}
-
 async function editStudent(s) {
   const name = prompt("Display name (what the student sees):", s.displayName);
   if (name === null) return;
-  const email = prompt("School email:", s.email || "");
+  const email = prompt("Student email (optional, only teachers see this):", s.email || "");
   if (email === null) return;
   const displayName = name.trim();
   if (!displayName) return toast("Name can't be blank.", true);
   await run(async () => {
     const b = writeBatch(db);
-    b.update(studentRef(s.id), { displayName, email: email.trim().toLowerCase() });
+    b.update(studentRef(s.id), { displayName, email: email.trim() });
     b.update(shareRef(s.token), { displayName });
     await b.commit();
   }, "Saved");
@@ -535,7 +532,7 @@ async function resetLink(s) {
     b.update(studentRef(s.id), { token });
     await b.commit();
     s.token = token;
-  }, `New link made for ${s.displayName}. Copy or email it to them.`);
+  }, `New link made for ${s.displayName}. Copy it and share it with them.`);
 }
 
 async function deleteStudent(s) {
@@ -615,7 +612,7 @@ function renderSettings() {
   $("#set-symbol").value = settings.symbol;
   $("#set-quick").value = settings.quickAmounts.join(", ");
   $("#set-negative").checked = !!settings.allowNegative;
-  $$("#settings-form input, #settings-form button").forEach((el) => (el.disabled = !owner));
+  $$("#settings-form input, #settings-form button, #logo-box input, #logo-box button").forEach((el) => (el.disabled = !owner));
   $("#settings-owner-note").hidden = owner;
   $("#delete-class-box").hidden = !owner;
   $("#class-title").textContent = settings.className;
@@ -663,7 +660,7 @@ function renderTeachers() {
     return `<li data-email="${esc(e)}">
       <span>${esc(e)} ${tags ? `<span class="tag">${tags}</span>` : ""}</span>
       <span class="actions">
-        ${canRemove ? `<button class="small" data-act="invite">Email invite</button>
+        ${canRemove ? `<button class="small" data-act="invite">Copy invite</button>
                        <button class="small danger" data-act="remove">Remove</button>` : ""}
       </span></li>`;
   }).join("");
@@ -681,7 +678,7 @@ $("#add-teacher-form").addEventListener("submit", async (e) => {
   await run(async () => {
     await updateDoc(classRef(), { memberEmails: arrayUnion(email) });
     $("#teacher-email").value = "";
-  }, `Added ${email}. Use "Email invite" to let them know.`);
+  }, `Added ${email}. Use "Copy invite" to send them a message.`);
 });
 
 $("#teacher-rows").addEventListener("click", async (e) => {
@@ -689,8 +686,7 @@ $("#teacher-rows").addEventListener("click", async (e) => {
   if (!btn) return;
   const email = btn.closest("li").dataset.email;
   if (btn.dataset.act === "invite") {
-    gmailCompose(email, `You've been added to ${settings.className} on Class Cash`,
-      `Hi,\n\nI've added you as a teacher for ${settings.className} on Class Cash, so you can add and take away ${settings.currencyName}.\n\nOpen ${appLink()} and sign in with this Google account (${email}). The class will be in the class menu at the top.\n`);
+    copyText(`Hi,\n\nI've added you as a teacher for ${settings.className} on Class Cash, so you can add and take away ${settings.currencyName}.\n\nOpen ${appLink()} and sign in with this Google account (${email}). The class will be in the class menu at the top.\n`, `Copied an invite for ${email}. Paste it into a message to them.`);
   } else if (btn.dataset.act === "remove") {
     if (!confirm(`Remove ${email} from ${settings.className}?\n\nThey will no longer be able to see or change this class. Transactions they made stay in the history.`)) return;
     await run(() => updateDoc(classRef(), { memberEmails: arrayRemove(email) }), `Removed ${email}`);
@@ -722,9 +718,74 @@ $("#delete-class").addEventListener("click", async () => {
     });
     await commitOps(ops);
     closeClass();
-    await commitOps([(b) => b.delete(classRef(id))]);
+    await commitOps([(b) => b.delete(logoRef(id)), (b) => b.delete(classRef(id))]);
     showTab("bank");
   }, "Class deleted");
+});
+
+// ---------- CURRENCY LOGO ----------
+function renderLogo() {
+  const has = !!logo;
+  $("#logo-preview").hidden = !has;
+  $("#logo-empty").hidden = has;
+  $("#logo-remove").hidden = !has;
+  if (has) $("#logo-preview").src = logo;
+  const top = $("#top-logo");
+  top.hidden = !has;
+  if (has) top.src = logo;
+}
+
+/** Shrink an image file to a small square-ish logo and return it as a data: URL (well under 150 KB). */
+async function makeLogo(file) {
+  if (!file.type.startsWith("image/")) throw new Error("Please choose an image file (PNG, JPG, GIF, WebP or SVG).");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("That image couldn't be opened. Try saving it as a PNG or JPG."));
+      i.src = url;
+    });
+    for (const size of [256, 192, 128, 96]) {
+      const w0 = img.naturalWidth || size, h0 = img.naturalHeight || size;
+      const scale = Math.min(1, size / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, w, h);
+      let data = canvas.toDataURL("image/webp", 0.85);
+      if (!data.startsWith("data:image/webp")) data = canvas.toDataURL("image/png");
+      if (data.length < 150000) return data;
+    }
+    throw new Error("That image is too detailed to use as a logo. Try a simpler or smaller image.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+$("#logo-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file || !isOwner()) return;
+  await run(async () => {
+    const image = await makeLogo(file);
+    await setDoc(logoRef(), { image, updatedAt: Date.now() });
+    logo = image;
+    renderLogo();
+    renderBank();
+  }, "Logo saved. Students will see it on their balance page.");
+});
+
+$("#logo-remove").addEventListener("click", async () => {
+  if (!isOwner() || !confirm("Remove this class's logo?")) return;
+  await run(async () => {
+    await commitOps([(b) => b.delete(logoRef())]);
+    logo = "";
+    renderLogo();
+    renderBank();
+  }, "Logo removed");
 });
 
 // ---------- IMPORT ----------

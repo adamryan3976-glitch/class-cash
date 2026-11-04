@@ -33,7 +33,7 @@ Only the person hosting Class Cash does this. Every other teacher just opens the
 2. Copy the `firebaseConfig` values into `js/firebase-config.js`.
 
 ### 3. Allow your GitHub Pages address to sign in
-**Authentication → Settings → Authorized domains → Add domain** → `YOUR-GITHUB-USERNAME.github.io`
+**Authentication → Settings → Authorized domains → Add domain** → `YOUR-GITHUB-USERNAME.github.io`, plus your custom domain if you use one (e.g. `class-cash.winchesterps.ca`).
 
 ### 4. Publish the security rules
 **Firestore Database → Rules** → replace everything with the contents of `firestore.rules` → **Publish**.
@@ -56,12 +56,12 @@ In **Firestore Database → Rules → Rules Playground**, try these. Turn on *Au
 
 **Classes**: the first time a teacher signs in, they tap **Create a class**. The menu at the top switches between classes and has **+ New class…**. Rotary teachers see every class they've been added to here, marked *(co-teacher)*.
 
-**Sharing a class with other teachers** (Settings → *Teachers*): the owner types a teacher's school email and taps **Add teacher**, then **Email invite** to send them the link. The class appears in their class menu the next time they sign in. What each teacher can do:
+**Sharing a class with other teachers** (Settings → *Teachers*): the owner types a teacher's school email and taps **Add teacher**, then **Copy invite** to copy a short message with the link that you can paste into a message to them. The class appears in their class menu the next time they sign in. What each teacher can do:
 
 | | Owner | Co-teacher |
 |---|:-:|:-:|
 | Deposit, withdraw, undo | ✓ | ✓ |
-| Add/edit students, copy/email/reset links, import | ✓ | ✓ |
+| Add/edit students, copy/reset links, import | ✓ | ✓ |
 | Change class settings | ✓ | |
 | Add or remove teachers | ✓ | |
 | Delete students or the whole class | ✓ | |
@@ -69,19 +69,20 @@ In **Firestore Database → Rules → Rules Playground**, try these. Turn on *Au
 
 The History tab shows which teacher made each transaction.
 
-**Students tab**: paste or type one student per line: the name you want them to see, then their school email. Examples:
+**Students tab**: type one student per line: the name you want them to see, then their student email (optional, only teachers see it). You can also paste two columns from a spreadsheet. Examples:
 ```
-Jordan L.	jordan.lee@school.ca      ← tab between (pasted from a spreadsheet)
-Sam P., sam.patel@school.ca
+Jordan L.   S123456789@ddsbstudent.ca
+Sam P.	S987654321@ddsbstudent.ca      ← tab between (pasted from a spreadsheet)
 MS
 ```
-For each student you can **Copy link**, **Email link** (opens a pre-filled Gmail message to that student), or **Preview**. Under **More** you can edit, **Reset link** (the old link stops working immediately) or, if you're the owner, delete the student. **Copy all links** copies a Name / Email / Link table you can paste into a private spreadsheet.
+Students never type a username or password; their private link is all they need. The email just helps teachers keep track of who's who.
+For each student you can **Copy link** (paste it wherever your students get messages, e.g. Google Classroom or a bookmark on a class device) or **Preview**. Under **More** you can edit, **Reset link** (the old link stops working immediately) or, if you're the owner, delete the student. **Copy all links** copies a Name / Email / Link table you can paste into a private spreadsheet.
 
 **Bank tab**: tap students to select them (or **Select all** for the whole class), pick or type an amount, add an optional reason, then **Deposit** or **Withdraw**. Withdrawals are blocked if a student doesn't have enough, unless you allow negative balances in Settings.
 
 **History tab**: every transaction, filterable by student. **Undo** removes a transaction and fixes the balance (on the student's page too).
 
-**Settings tab**: class name, currency name (e.g. *Maple Bucks*, *Pesos*), symbol, quick-amount buttons, negative balances. At the end of the year the owner can **Delete class**.
+**Settings tab**: class name, currency name (e.g. *Maple Bucks*, *Pesos*), symbol, quick-amount buttons, negative balances. The owner can also add a **currency logo**: any picture (PNG, JPG, GIF, WebP, SVG). It's shrunk automatically to a small image and shown on each student's balance page and next to balances on the Bank tab. At the end of the year the owner can **Delete class**.
 
 ### Moving over from the old Google Sheet
 1. Add your whole class on the Students tab first (whole-class deposits are given to everyone in the list).
@@ -93,16 +94,18 @@ For each student you can **Copy link**, **Email link** (opens a pre-filled Gmail
 
 - Student pages have `noindex` and `no-referrer`, so links aren't picked up by search engines or leaked to other sites.
 - If a student shares their link, **Reset link** and send a new one.
-- Student emails are stored only so you can send links. Check that your board is comfortable with storing student emails in Firebase. You can leave emails blank and share links another way (e.g. Google Classroom private comment).
+- Student emails are optional and only visible to teachers of the class. Leave them blank if you'd rather not store them.
+- Class logos are not private: anyone with a student link can see that class's logo. Don't use photos of students.
 - Deleting a student removes their balance, history and link.
 
 ## How the data is stored (for maintainers)
 
 ```
 classes/{classId}                       settings, ownerUid, ownerEmail, memberEmails[] (teachers of the class)
-classes/{classId}/students/{id}         displayName, email, token, balance (cents)
+classes/{classId}/students/{id}         displayName, email (optional), token, balance (cents)
 classes/{classId}/transactions/{id}     studentId, amount (cents), note, t, group, by (teacher email), pub
 shares/{token}                          classId, displayName, balance, history[], currency/class name
+logos/{classId}                         image (small data: URL, < 150 KB), updatedAt — readable by anyone, owner writes
 ```
 Teachers are matched by the email on their Google account (lower-cased), so add the exact address they sign in with.
-`shares/{token}` is the only thing a student can read, and only with the exact token. Amounts are stored as whole cents to avoid rounding errors.
+`shares/{token}` (plus their class logo) is the only thing a student can read, and only with the exact token. Amounts are stored as whole cents to avoid rounding errors.

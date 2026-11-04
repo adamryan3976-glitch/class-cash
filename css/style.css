@@ -163,3 +163,20 @@ body.busy button { pointer-events: none; }
   .class-picker { max-width: 78vw; }
 }
 .error-text { color: var(--red); font-weight: 600; }
+
+/* Currency logo */
+.topbar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.top-logo { width: 32px; height: 32px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,.9); padding: 2px; }
+.coin { width: 18px; height: 18px; object-fit: contain; vertical-align: -3px; margin-right: 4px; }
+.logo-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+.logo-preview, .logo-empty { width: 96px; height: 96px; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.logo-preview { object-fit: contain; padding: 6px; }
+.logo-empty { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); font-size: .8rem; }
+.logo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.button-like { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px;
+  min-height: 40px; cursor: pointer; background: #fff; }
+.button-like.primary { background: var(--green); color: #fff; border-color: var(--green); }
+#logo-box:has(input:disabled) .button-like { opacity: .5; pointer-events: none; }
+.currency-logo { width: 88px; height: 88px; object-fit: contain; display: block; margin: 0 auto 10px;
+  background: rgba(255,255,255,.95); border-radius: 50%; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.history .coin { width: 16px; height: 16px; }

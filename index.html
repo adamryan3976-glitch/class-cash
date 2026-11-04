@@ -13,7 +13,10 @@
 <body>
   <header class="topbar">
     <div class="brand">🪙 <span>Class Cash</span></div>
-    <select id="class-picker" class="class-picker" aria-label="Choose a class" hidden></select>
+    <div class="topbar-right">
+      <img id="top-logo" class="top-logo" alt="" hidden>
+      <select id="class-picker" class="class-picker" aria-label="Choose a class" hidden></select>
+    </div>
     <span id="class-title" hidden></span>
   </header>
 
@@ -73,9 +76,9 @@
     <section id="panel-students" class="panel" hidden>
       <div class="box">
         <h2>Add students</h2>
-        <p class="muted small">One student per line. Use any name you like (first name, initials…), then their school email.
-          You can paste two columns straight from a spreadsheet.</p>
-        <textarea id="new-students" rows="5" placeholder="Jordan L.   jordan.lee@school.ca&#10;Sam P.   sam.patel@school.ca&#10;MS"></textarea>
+        <p class="muted small">One student per line: the name you want them to see (first name, initials…), then their student email.
+          The email is optional and only teachers see it. You can also paste two columns from a spreadsheet.</p>
+        <textarea id="new-students" rows="5" placeholder="Jordan L.   S123456789@ddsbstudent.ca&#10;Sam P.   S987654321@ddsbstudent.ca&#10;MS"></textarea>
         <button id="add-students" class="primary">Add students</button>
       </div>
 
@@ -124,6 +127,21 @@
         <label class="check"><input id="set-negative" type="checkbox"> Allow balances to go below zero</label>
         <button class="primary" type="submit">Save settings</button>
       </form>
+
+      <div id="logo-box" class="box">
+        <h2>Currency logo</h2>
+        <p class="muted small">Add a picture for your class currency (a coin, a mascot, your class logo…). It shows on each
+          student's balance page and next to balances here. Square images with a plain or transparent background work best.
+          It's shrunk automatically.</p>
+        <div class="logo-row">
+          <img id="logo-preview" class="logo-preview" alt="Current currency logo" hidden>
+          <div id="logo-empty" class="logo-empty">No logo yet</div>
+          <div class="logo-actions">
+            <label class="button-like primary">Choose image…<input id="logo-file" type="file" accept="image/*" hidden></label>
+            <button id="logo-remove" type="button" hidden>Remove</button>
+          </div>
+        </div>
+      </div>
 
       <div class="box">
         <h2>Import from the old Google Sheet</h2>
