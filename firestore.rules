@@ -1,0 +1,93 @@
+rules_version = '2';
+
+// Class Cash security rules
+//
+// classes/{classId}                  class settings + list of teacher emails (memberEmails)
+// classes/{classId}/students/{id}    student names, emails, balances      (teachers of that class only)
+// classes/{classId}/transactions/{id} full log                            (teachers of that class only)
+// shares/{code}                      one student's balance page — opened only with the exact secret code,
+//                                    never listed or searched
+//
+// Owner: can change settings, add/remove teachers, delete students, delete the class.
+// Co-teachers: can deposit/withdraw/undo, add and edit students, reset links, and leave the class.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Who may sign in as a teacher at all: only verified @ddsb.ca Google accounts.
+    // (If you change the domain, also change ALLOWED_DOMAIN in js/firebase-config.js.)
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower().matches('.*@ddsb[.]ca$');
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function classDoc(classId) {
+      return get(/databases/$(database)/documents/classes/$(classId)).data;
+    }
+
+    function isMember(classId) {
+      return signedIn() && myEmail() in classDoc(classId).memberEmails;
+    }
+
+    function isClassOwner(classId) {
+      return signedIn() && classDoc(classId).ownerUid == request.auth.uid;
+    }
+
+    match /classes/{classId} {
+      allow get, list: if signedIn() && myEmail() in resource.data.memberEmails;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberEmails is list
+        && myEmail() in request.resource.data.memberEmails;
+
+      // Owner can change anything except who owns it, and can't remove themselves.
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberEmails is list
+        && myEmail() in request.resource.data.memberEmails;
+
+      // A co-teacher can leave: remove only their own email, nothing else.
+      allow update: if signedIn()
+        && myEmail() in resource.data.memberEmails
+        && resource.data.ownerUid != request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberEmails'])
+        && !(myEmail() in request.resource.data.memberEmails)
+        && request.resource.data.memberEmails.size() == resource.data.memberEmails.size() - 1;
+
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /students/{studentId} {
+        allow read, create, update: if isMember(classId);
+        allow delete: if isClassOwner(classId);
+      }
+
+      match /transactions/{txId} {
+        allow read, create, delete: if isMember(classId);
+        allow update: if false;
+      }
+    }
+
+    match /shares/{code} {
+      // Anyone with the exact code can open that one page. Listing/searching is never allowed.
+      allow get: if code.size() >= 20;
+      allow list: if false;
+
+      allow create: if code.size() >= 20 && isMember(request.resource.data.classId);
+      allow update: if isMember(resource.data.classId)
+        && request.resource.data.classId == resource.data.classId;
+      allow delete: if isMember(resource.data.classId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

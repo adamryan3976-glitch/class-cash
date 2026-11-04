@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#1f6f4a">
+  <title>My Balance · Class Cash</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="student">
+  <header class="topbar">
+    <div class="brand">🪙 <span>Class Cash</span></div>
+    <div id="class-name" class="class-title"></div>
+  </header>
+
+  <main class="student-main">
+    <div id="loading" class="center-card"><p>Loading…</p></div>
+
+    <div id="error" class="center-card" hidden>
+      <h1>Hmm, this link isn't working</h1>
+      <p>Ask your teacher for a new link.</p>
+    </div>
+
+    <div id="balance-view" hidden>
+      <section class="balance-card">
+        <div id="student-name" class="student-name"></div>
+        <div class="balance-label">Your <span id="currency"></span> balance</div>
+        <div id="balance" class="balance"></div>
+        <div id="updated" class="muted small"></div>
+      </section>
+
+      <section class="box">
+        <h2>History</h2>
+        <ul id="history" class="history"></ul>
+      </section>
+      <p class="muted small center">This page is just for you. Please don't share your link.</p>
+    </div>
+  </main>
+
+  <script type="module" src="js/student.js"></script>
+</body>
+</html>

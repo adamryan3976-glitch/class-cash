@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#1f6f4a">
+  <title>Class Cash · Teacher</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🪙 <span>Class Cash</span></div>
+    <select id="class-picker" class="class-picker" aria-label="Choose a class" hidden></select>
+    <span id="class-title" hidden></span>
+  </header>
+
+  <!-- Signed out -->
+  <main id="signed-out" class="center-card">
+    <h1>Class Cash</h1>
+    <p>A paperless classroom economy. Teachers sign in to manage their class bank.</p>
+    <button id="signin" class="primary big">Sign in with Google</button>
+    <p id="signin-error" class="error-text" hidden></p>
+    <p class="muted small">Students: use the private link your teacher sent you.</p>
+  </main>
+
+  <!-- Signed in -->
+  <div id="app" hidden>
+    <main id="no-class" class="center-card" hidden>
+      <h1>Welcome!</h1>
+      <p>You're not in any classes yet.</p>
+      <button id="create-first-class" class="primary big">Create a class</button>
+      <p class="muted small">Teaching rotary? Ask the homeroom teacher to add <strong class="my-email"></strong>
+        on their Settings tab. Their class will appear here automatically.</p>
+      <p><button class="link" onclick="document.querySelector('#signout').click()">Sign out</button></p>
+    </main>
+
+    <div id="class-ui" hidden>
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab" data-tab="bank">Bank</button>
+      <button class="tab" data-tab="students">Students</button>
+      <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- BANK -->
+    <section id="panel-bank" class="panel">
+      <div class="toolbar">
+        <input id="bank-search" type="search" placeholder="Find a student…" aria-label="Find a student">
+        <button id="select-all">Select all</button>
+        <button id="select-none">Clear</button>
+      </div>
+      <div id="bank-grid" class="grid"></div>
+
+      <div id="action-bar" class="action-bar">
+        <div id="sel-count" class="sel-count">Tap students to select</div>
+        <div id="quick-amounts" class="chips"></div>
+        <div class="action-row">
+          <input id="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount" aria-label="Amount">
+          <input id="note" type="text" list="note-list" maxlength="80" placeholder="Reason (optional)" aria-label="Reason">
+          <datalist id="note-list"></datalist>
+        </div>
+        <div class="action-row">
+          <button id="deposit" class="deposit big">＋ Deposit</button>
+          <button id="withdraw" class="withdraw big">− Withdraw</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STUDENTS -->
+    <section id="panel-students" class="panel" hidden>
+      <div class="box">
+        <h2>Add students</h2>
+        <p class="muted small">One student per line. Use any name you like (first name, initials…), then their school email.
+          You can paste two columns straight from a spreadsheet.</p>
+        <textarea id="new-students" rows="5" placeholder="Jordan L.   jordan.lee@school.ca&#10;Sam P.   sam.patel@school.ca&#10;MS"></textarea>
+        <button id="add-students" class="primary">Add students</button>
+      </div>
+
+      <div class="box">
+        <div class="row-between">
+          <h2>Your class <span id="student-count" class="muted"></span></h2>
+          <button id="copy-all-links">Copy all links</button>
+        </div>
+        <p class="muted small">Each student has a private link that only shows their own balance. If a link gets shared, use
+          <em>More → Reset link</em> and the old one stops working.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th class="num">Balance</th><th></th></tr></thead>
+            <tbody id="student-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="panel-history" class="panel" hidden>
+      <div class="box">
+        <div class="row-between">
+          <h2>History</h2>
+          <select id="history-filter" aria-label="Filter by student"></select>
+        </div>
+        <p class="muted small">Made a mistake? Undo removes the transaction and fixes the balance.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Student</th><th class="num">Amount</th><th>Reason</th><th>By</th><th></th></tr></thead>
+            <tbody id="history-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="panel-settings" class="panel" hidden>
+      <form id="settings-form" class="box">
+        <h2>Settings</h2>
+        <p id="settings-owner-note" class="muted small" hidden>Only the class owner can change these settings.</p>
+        <label>Class name <input id="set-class" maxlength="40"></label>
+        <label>Currency name <input id="set-currency" maxlength="30" placeholder="e.g. Maple Bucks, Pesos"></label>
+        <label>Symbol <input id="set-symbol" maxlength="4" class="short"></label>
+        <label>Quick amounts <input id="set-quick" placeholder="1, 2, 5, 10, 20"></label>
+        <label class="check"><input id="set-negative" type="checkbox"> Allow balances to go below zero</label>
+        <button class="primary" type="submit">Save settings</button>
+      </form>
+
+      <div class="box">
+        <h2>Import from the old Google Sheet</h2>
+        <ol class="small">
+          <li>Add your whole class on the Students tab first.</li>
+          <li>In the old sheet, open the <strong>Form Responses 1</strong> tab → <em>File → Download → Comma-separated values (.csv)</em>.</li>
+          <li>Choose that file below, check each name is matched to the right student, then import.</li>
+        </ol>
+        <input id="import-file" type="file" accept=".csv,text/csv">
+        <div id="import-preview" hidden>
+          <p id="import-summary" class="small"></p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name in sheet</th><th>Class Cash student</th></tr></thead>
+              <tbody id="import-rows"></tbody>
+            </table>
+          </div>
+          <button id="run-import" class="primary">Import transactions</button>
+        </div>
+      </div>
+
+      <div class="box">
+        <h2>Teachers</h2>
+        <p class="muted small">Everyone listed here can see this class and add or take away money. Only the owner can
+          change settings, add or remove teachers, and delete students.</p>
+        <ul id="teacher-rows" class="teacher-list"></ul>
+        <form id="add-teacher-form" class="inline-form">
+          <input id="teacher-email" type="email" placeholder="teacher@ddsb.ca" aria-label="Teacher's school email" autocomplete="off">
+          <button class="primary" type="submit">Add teacher</button>
+        </form>
+        <button id="leave-class" class="danger" hidden>Leave this class</button>
+      </div>
+
+      <div class="box">
+        <h2>Account</h2>
+        <p class="small">Signed in as <span class="my-email"></span></p>
+        <button id="signout">Sign out</button>
+      </div>
+
+      <div id="delete-class-box" class="box" hidden>
+        <h2>Delete this class</h2>
+        <p class="muted small">Permanently removes every student, balance, link and transaction in this class, for all teachers.
+          Useful at the end of the year.</p>
+        <button id="delete-class" class="danger">Delete class…</button>
+      </div>
+    </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/teacher.js"></script>
+</body>
+</html>
