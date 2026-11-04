@@ -147,8 +147,12 @@ onAuthStateChanged(auth, (user) => {
 
   classesUnsub = onSnapshot(
     query(collection(db, "classes"), where("memberEmails", "array-contains", me.email)),
+    { includeMetadataChanges: true },
     (snap) => {
-      classes = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      // Skip a just-created class until the server has saved it; listening to its students
+      // before then would be refused by the security rules.
+      classes = snap.docs.filter((d) => !d.metadata.hasPendingWrites)
+        .map((d) => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (a.className || "").localeCompare(b.className || "", "en", { sensitivity: "base" }));
       onClassesChanged();
     },
@@ -237,20 +241,39 @@ function openClass(id) {
   renderAll();
 
   const thisClass = id;
-  dataUnsubs.push(onSnapshot(studentsCol(), (snap) => {
-    if (classId !== thisClass) return;
+  listen(thisClass, "students", () => studentsCol(), (snap) => {
     students = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" }));
     for (const sid of [...selected]) if (!byId(sid)) selected.delete(sid);
     renderAll();
-  }, (err) => toast("Lost connection to students: " + err.message, true)));
-
-  dataUnsubs.push(onSnapshot(query(txCol(), orderBy("t", "desc"), limit(100)), (snap) => {
-    if (classId !== thisClass) return;
+  });
+  listen(thisClass, "history", () => query(txCol(), orderBy("t", "desc"), limit(100)), (snap) => {
     transactions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderHistory();
     renderNoteSuggestions();
-  }, (err) => toast("Lost connection to history: " + err.message, true)));
+  });
+}
+
+/** Keep a live listener open for the current class, reconnecting automatically if it's refused or drops. */
+function listen(forClass, label, makeQuery, onData, attempt = 0) {
+  let unsub = () => {};
+  const stop = () => unsub();
+  dataUnsubs.push(stop);
+  unsub = onSnapshot(makeQuery(), (snap) => {
+    if (classId !== forClass) return;
+    attempt = 0;
+    onData(snap);
+  }, (err) => {
+    console.warn(`Class Cash: ${label} listener stopped`, err);
+    if (classId !== forClass) return;
+    dataUnsubs = dataUnsubs.filter((u) => u !== stop);
+    if (attempt < 5) {
+      setTimeout(() => { if (classId === forClass) listen(forClass, label, makeQuery, onData, attempt + 1); },
+        1000 * (attempt + 1));
+    } else {
+      toast(`Lost connection to ${label}. Refresh the page to reconnect.`, true);
+    }
+  });
 }
 
 // ---------- tabs ----------
@@ -419,6 +442,8 @@ async function createStudents(rows) {
   await commitOps(ops);
   // Make new students available right away (the live listener will catch up too).
   for (const c of created) if (!byId(c.id)) students.push(c);
+  students.sort((a, b) => a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" }));
+  renderAll();
   return created;
 }
 
