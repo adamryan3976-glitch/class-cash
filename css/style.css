@@ -180,3 +180,60 @@ body.busy button { pointer-events: none; }
 .currency-logo { width: 88px; height: 88px; object-fit: contain; display: block; margin: 0 auto 10px;
   background: rgba(255,255,255,.95); border-radius: 50%; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
 .history .coin { width: 16px; height: 16px; }
+
+/* Learning skills */
+.skill-label span { font-weight: 400; }
+.skill-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+.skill-chip { min-height: 34px; padding: 4px 6px; font-size: .82rem; border-radius: 999px; line-height: 1.1;
+  border: 1.5px solid var(--sk); color: var(--sk); background: #fff; font-weight: 600; }
+.skill-chip.on { background: var(--sk); color: #fff; }
+.skill-chip.on::before { content: "✓ "; }
+.skill-tag { display: inline-block; font-size: .72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  color: #fff; background: var(--sk); margin: 1px 0; white-space: nowrap; }
+.skill-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--sk); margin-right: 6px; vertical-align: 0; }
+.grid { padding-bottom: 340px; }
+#settings-form label.check { flex-wrap: wrap; }
+
+.controls-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.controls-row label { display: grid; gap: 4px; font-size: .85rem; font-weight: 600; flex: 1 1 140px; }
+.controls-row button { flex: 0 0 auto; }
+.report-head h2 { margin-bottom: 2px; }
+.report-summary { margin: 12px 0 8px; }
+.skill-section { border-left: 4px solid var(--sk); padding-left: 12px; margin: 18px 0; }
+.skill-section h3 { margin: 0 0 6px; font-size: 1rem; color: var(--sk); }
+.skill-section h3 .muted { color: var(--muted); font-weight: 400; }
+.report-list { list-style: none; padding: 0; margin: 0; }
+.report-list li { display: grid; grid-template-columns: 100px 70px 1fr auto; gap: 8px; padding: 6px 0;
+  border-bottom: 1px solid var(--line); align-items: baseline; font-size: .9rem; }
+.report-list .num { text-align: right; }
+.untagged { margin-top: 16px; }
+.untagged summary { cursor: pointer; color: var(--muted); }
+.overview th, .overview td { padding: 8px 6px; }
+.overview th { font-size: .72rem; white-space: nowrap; }
+.reference summary { cursor: pointer; }
+.ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.ref-skill { border-left: 4px solid var(--sk); padding-left: 10px; }
+.ref-skill h4 { margin: 0 0 4px; color: var(--sk); }
+.ref-skill ul { margin: 0; padding-left: 18px; font-size: .85rem; }
+
+/* Student page skill tags */
+.history .tags { margin-top: 3px; }
+
+@media (max-width: 600px) {
+  .report-list li { grid-template-columns: 82px 62px 1fr; }
+  .report-list .by { display: none; }
+  .tabs .tab { font-size: .85rem; }
+}
+
+@media print {
+  .topbar, .tabs, .action-bar, .toast, .report-controls .controls-row button, #no-class,
+  .panel:not(#panel-skills), .reference { display: none !important; }
+  body, .box { background: #fff; box-shadow: none; }
+  .report-controls p { display: none; }
+  .report-controls h2 { display: none; }
+  .report-controls { padding: 0; margin: 0; }
+  .controls-row { display: none; }
+  .untagged { display: none; }
+  .skill-tag, .skill-dot, .skill-section, .plus, .minus { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .panel { max-width: none; padding: 0; }
+}

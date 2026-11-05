@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { formatMoney, formatSigned, formatDate, formatDateTime } from "./util.js";
+import { formatMoney, formatSigned, formatDate, formatDateTime, esc } from "./util.js";
+import { skillTags } from "./skills.js";
 
 const $ = (sel) => document.querySelector(sel);
 const code = new URLSearchParams(location.search).get("k") || "";
@@ -78,6 +79,12 @@ function render(d) {
     when.className = "muted small";
     when.textContent = formatDate(h.t);
     left.append(note, when);
+    if (d.showSkills !== false && h.s && h.s.length) {
+      const tags = document.createElement("div");
+      tags.className = "tags";
+      tags.innerHTML = skillTags(h.s, esc);
+      left.append(tags);
+    }
     const amt = document.createElement("div");
     amt.className = "amt " + (h.a < 0 ? "minus" : "plus");
     amt.textContent = formatSigned(h.a, symbol);

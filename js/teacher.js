@@ -11,6 +11,7 @@ import {
   newToken, shortId, toCents, formatMoney, formatSigned, formatDateTime, esc, parseStudentLines,
 } from "./util.js";
 import { parseFormResponses, suggestMatch } from "./sheet-import.js";
+import { SKILLS, skillName, skillTags, schoolYearStart } from "./skills.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -22,6 +23,8 @@ const DEFAULT_SETTINGS = {
   symbol: "$",
   quickAmounts: [1, 2, 5, 10, 20],
   allowNegative: false,
+  useSkills: true,              // tag deposits/withdrawals with Ontario Learning Skills
+  showSkillsToStudents: true,   // show those tags on student pages
 };
 
 // ---------- state ----------
@@ -33,6 +36,7 @@ let students = [];          // [{ id, displayName, email, token, balance }]
 let transactions = [];      // recent, newest first
 let logo = "";              // current class's currency logo (small data: URL) or ""
 const selected = new Set();
+const selectedSkills = new Set();   // learning skill codes chosen for the next deposit/withdrawal
 let classesUnsub = null;
 let dataUnsubs = [];
 let pendingClassId = null;  // a class we just created, to open once it appears
@@ -294,6 +298,7 @@ function renderAll() {
   renderHistoryFilter();
   renderHistory();
   renderImportMapping();
+  renderReportStudentPicker();
 }
 
 // ---------- BANK ----------
@@ -345,6 +350,23 @@ $("#quick-amounts").addEventListener("click", (e) => {
   if (b) { $("#amount").value = b.dataset.amt; }
 });
 
+function renderSkillChips() {
+  const on = settings.useSkills !== false;
+  $("#skill-row").hidden = !on;
+  $$('.tab[data-tab="skills"]').forEach((t) => (t.hidden = !on));
+  if (!on) { selectedSkills.clear(); if (document.body.dataset.tab === "skills") showTab("bank"); }
+  $("#skill-chips").innerHTML = SKILLS.map((k) => `
+    <button type="button" class="skill-chip ${selectedSkills.has(k.code) ? "on" : ""}" data-skill="${k.code}"
+      style="--sk:${k.color}" aria-pressed="${selectedSkills.has(k.code)}" title="${esc(k.behaviours.join("\n"))}">${esc(k.name)}</button>`).join("");
+}
+$("#skill-chips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-skill]");
+  if (!b) return;
+  const c = b.dataset.skill;
+  selectedSkills.has(c) ? selectedSkills.delete(c) : selectedSkills.add(c);
+  renderSkillChips();
+});
+
 function renderNoteSuggestions() {
   const seen = new Set();
   for (const t of transactions) {
@@ -373,13 +395,17 @@ async function moveMoney(sign) {
   }
   const group = ids.length === students.length && ids.length > 1 ? "whole" : ids.length > 1 ? "group" : "individual";
   const who = ids.length > 1 ? `for ${ids.length} students` : `for ${byId(ids[0]).displayName}`;
+  const skills = settings.useSkills !== false ? SKILLS.map((k) => k.code).filter((c) => selectedSkills.has(c)) : [];
+  const forSkills = skills.length ? ` (${skills.map(skillName).join(", ")})` : "";
   await run(async () => {
-    await applyTransactions(ids.map((id) => ({ studentId: id, amount, note, t: Date.now(), group })));
+    await applyTransactions(ids.map((id) => ({ studentId: id, amount, note, skills, t: Date.now(), group })));
     selected.clear();
+    selectedSkills.clear();
     $("#amount").value = "";
     $("#note").value = "";
     renderBank();
-  }, `${sign > 0 ? "Added" : "Took away"} ${money(cents)} ${who}`);
+    renderSkillChips();
+  }, `${sign > 0 ? "Added" : "Took away"} ${money(cents)} ${who}${forSkills}`);
 }
 
 /**
@@ -397,9 +423,11 @@ async function applyTransactions(list) {
     const s = byId(tx.studentId);
     if (!s) continue;
     const ref = doc(txCol());
+    const skills = tx.skills || [];
     const pub = { id: ref.id, a: tx.amount, n: tx.note || "", t: tx.t };
+    if (skills.length) pub.s = skills;
     ops.push((b) => b.set(ref, {
-      studentId: s.id, amount: tx.amount, note: tx.note || "", t: tx.t, group: tx.group || "individual",
+      studentId: s.id, amount: tx.amount, note: tx.note || "", skills, t: tx.t, group: tx.group || "individual",
       batchId, pub, by: me.email,
     }));
     const agg = perStudent.get(s.id) || { total: 0, pubs: [] };
@@ -444,7 +472,8 @@ async function createStudents(rows) {
     ops.push((b) => b.set(ref, { displayName: r.displayName, email: r.email || "", token, balance: 0, createdAt: now }));
     ops.push((b) => b.set(shareRef(token), {
       classId, displayName: r.displayName, balance: 0, history: [],
-      className: settings.className, currencyName: settings.currencyName, symbol: settings.symbol, updatedAt: now,
+      className: settings.className, currencyName: settings.currencyName, symbol: settings.symbol,
+      showSkills: settings.useSkills !== false && settings.showSkillsToStudents !== false, updatedAt: now,
     }));
     created.push({ id: ref.id, displayName: r.displayName, email: r.email || "", token, balance: 0 });
   }
@@ -527,6 +556,7 @@ async function resetLink(s) {
     const b = writeBatch(db);
     b.set(shareRef(token), { ...(old.exists() ? old.data() : {}), classId, displayName: s.displayName,
       balance: s.balance || 0, className: settings.className, currencyName: settings.currencyName, symbol: settings.symbol,
+      showSkills: settings.useSkills !== false && settings.showSkillsToStudents !== false,
       history: old.exists() ? old.data().history || [] : [], updatedAt: Date.now() });
     if (old.exists()) b.delete(shareRef(s.token));
     b.update(studentRef(s.id), { token });
@@ -579,7 +609,7 @@ function renderHistory() {
       <td class="small">${esc(formatDateTime(t.t))}</td>
       <td>${s ? esc(s.displayName) : "<em>deleted</em>"}</td>
       <td class="num ${t.amount < 0 ? "minus" : "plus"}">${esc(formatSigned(t.amount, settings.symbol))}</td>
-      <td class="small">${esc(t.note)}${label[t.group] ? ` <span class="tag">${label[t.group]}</span>` : ""}</td>
+      <td class="small">${esc(t.note)} ${skillTags(t.skills, esc)}${label[t.group] ? ` <span class="tag">${label[t.group]}</span>` : ""}</td>
       <td class="small muted" title="${esc(t.by || "")}">${esc(t.by === me.email ? "you" : shortEmail(t.by))}</td>
       <td><button class="small" data-act="undo" title="Delete this transaction">Undo</button></td>
     </tr>`;
@@ -612,11 +642,15 @@ function renderSettings() {
   $("#set-symbol").value = settings.symbol;
   $("#set-quick").value = settings.quickAmounts.join(", ");
   $("#set-negative").checked = !!settings.allowNegative;
+  $("#set-skills").checked = settings.useSkills !== false;
+  $("#set-skills-students").checked = settings.showSkillsToStudents !== false;
+  $("#set-skills-students").closest("label").hidden = settings.useSkills === false;
   $$("#settings-form input, #settings-form button, #logo-box input, #logo-box button").forEach((el) => (el.disabled = !owner));
   $("#settings-owner-note").hidden = owner;
   $("#delete-class-box").hidden = !owner;
   $("#class-title").textContent = settings.className;
   renderQuickAmounts();
+  renderSkillChips();
 }
 
 $("#settings-form").addEventListener("submit", async (e) => {
@@ -628,15 +662,18 @@ $("#settings-form").addEventListener("submit", async (e) => {
     symbol: $("#set-symbol").value.trim().slice(0, 4) || "$",
     quickAmounts: $("#set-quick").value.split(/[,\s]+/).map(Number).filter((n) => n > 0).slice(0, 8),
     allowNegative: $("#set-negative").checked,
+    useSkills: $("#set-skills").checked,
+    showSkillsToStudents: $("#set-skills-students").checked,
   };
   if (!next.quickAmounts.length) next.quickAmounts = DEFAULT_SETTINGS.quickAmounts;
   await run(async () => {
     const ops = [(b) => b.update(classRef(), next)];
-    const shared = ["className", "currencyName", "symbol"];
+    const shared = ["className", "currencyName", "symbol", "useSkills", "showSkillsToStudents"];
     if (shared.some((k) => next[k] !== settings[k])) {
       for (const s of students) {
         ops.push((b) => b.update(shareRef(s.token), {
           className: next.className, currencyName: next.currencyName, symbol: next.symbol,
+          showSkills: next.useSkills && next.showSkillsToStudents,
         }));
       }
     }
@@ -722,6 +759,122 @@ $("#delete-class").addEventListener("click", async () => {
     showTab("bank");
   }, "Class deleted");
 });
+
+// ---------- SKILLS REPORT ----------
+// Reads the full transaction log for the chosen dates (the History tab only keeps the latest 100).
+const dateInput = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function parseDateInput(v, endOfDay) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || "");
+  if (!m) return null;
+  return endOfDay ? new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999).getTime() : new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+}
+$("#report-from").value = dateInput(schoolYearStart());
+$("#report-to").value = dateInput(new Date());
+
+function renderReportStudentPicker() {
+  const sel = $("#report-student");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">Whole class overview</option>` +
+    students.map((s) => `<option value="${esc(s.id)}">${esc(s.displayName)}</option>`).join("");
+  sel.value = byId(cur) ? cur : "";
+}
+
+["#report-student", "#report-from", "#report-to"].forEach((id) => $(id).addEventListener("change", loadReport));
+$$('.tab[data-tab="skills"]').forEach((t) => t.addEventListener("click", loadReport));
+$("#report-print").addEventListener("click", () => window.print());
+$("#skills-report").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-student]");
+  if (b) { $("#report-student").value = b.dataset.student; loadReport(); }
+});
+
+let reportSeq = 0;
+async function loadReport() {
+  if (!classId) return;
+  const seq = ++reportSeq;
+  const from = parseDateInput($("#report-from").value, false) ?? 0;
+  const to = parseDateInput($("#report-to").value, true) ?? Date.now();
+  const sid = $("#report-student").value;
+  const out = $("#skills-report");
+  out.innerHTML = `<p class="muted">Loading…</p>`;
+  try {
+    const q = sid ? query(txCol(), where("studentId", "==", sid)) : query(txCol(), where("t", ">=", from), where("t", "<=", to));
+    const snap = await getDocs(q);
+    if (seq !== reportSeq) return;
+    const txs = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .filter((t) => t.t >= from && t.t <= to)
+      .sort((a, b) => a.t - b.t);
+    out.innerHTML = sid ? studentReportHtml(byId(sid), txs, from, to) : classReportHtml(txs, from, to);
+  } catch (err) {
+    console.error(err);
+    if (seq === reportSeq) out.innerHTML = `<p class="error-text">Couldn't load the report: ${esc(err.message)}</p>`;
+  }
+}
+
+const rangeText = (from, to) => `${formatDateOnly(from)} – ${formatDateOnly(to)}`;
+function formatDateOnly(ms) {
+  return new Date(ms).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function studentReportHtml(s, txs, from, to) {
+  if (!s) return "";
+  const rows = SKILLS.map((k) => {
+    const list = txs.filter((t) => (t.skills || []).includes(k.code));
+    const plus = list.filter((t) => t.amount > 0), minus = list.filter((t) => t.amount < 0);
+    return { k, list, plus, minus, net: list.reduce((n, t) => n + t.amount, 0) };
+  });
+  const untagged = txs.filter((t) => !(t.skills || []).length && !String(t.note).startsWith("Imported"));
+  const summary = `
+    <table class="report-summary">
+      <thead><tr><th>Learning skill</th><th class="num">Deposits</th><th class="num">Withdrawals</th><th class="num">Net</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td><span class="skill-dot" style="--sk:${r.k.color}"></span>${esc(r.k.name)}</td>
+        <td class="num plus">${r.plus.length ? `${r.plus.length} <span class="muted small">(${esc(money(r.plus.reduce((n, t) => n + t.amount, 0)))})</span>` : "–"}</td>
+        <td class="num minus">${r.minus.length ? `${r.minus.length} <span class="muted small">(${esc(money(-r.minus.reduce((n, t) => n + t.amount, 0)))})</span>` : "–"}</td>
+        <td class="num">${r.list.length ? esc(formatSigned(r.net, settings.symbol)) : "–"}</td></tr>`).join("")}
+      </tbody></table>`;
+  const entry = (t, here) => `<li><span class="when">${esc(formatDateOnly(t.t))}</span>
+      <span class="num ${t.amount < 0 ? "minus" : "plus"}">${esc(formatSigned(t.amount, settings.symbol))}</span>
+      <span class="what">${t.note ? esc(t.note) : `<span class="muted">${t.amount < 0 ? "Withdrawal" : "Deposit"}</span>`}
+      ${(t.skills || []).some((c) => c !== here) ? `<span class="muted small">· ${here ? "also " : ""}${esc(t.skills.filter((c) => c !== here).map(skillName).join(", "))}</span>` : ""}</span>
+      <span class="muted small by">${esc(shortEmail(t.by))}</span></li>`;
+  const sections = rows.filter((r) => r.list.length).map((r) => `
+    <section class="skill-section" style="--sk:${r.k.color}">
+      <h3>${esc(r.k.name)} <span class="muted small">${r.plus.length} deposit${r.plus.length === 1 ? "" : "s"}, ${r.minus.length} withdrawal${r.minus.length === 1 ? "" : "s"}</span></h3>
+      <ul class="report-list">${[...r.list].reverse().map((t) => entry(t, r.k.code)).join("")}</ul>
+    </section>`).join("");
+  return `
+    <div class="report-head">
+      <h2>${esc(s.displayName)}: learning skills</h2>
+      <p class="muted small">${esc(settings.className)} · ${esc(rangeText(from, to))} · ${txs.length} transaction${txs.length === 1 ? "" : "s"}, current balance ${esc(money(s.balance || 0))}</p>
+    </div>
+    ${summary}
+    ${sections || `<p class="empty">No learning skills recorded for ${esc(s.displayName)} in these dates.</p>`}
+    ${untagged.length ? `<details class="untagged"><summary>${untagged.length} transaction${untagged.length === 1 ? "" : "s"} with no learning skill</summary>
+      <ul class="report-list">${[...untagged].reverse().map((t) => entry(t, "")).join("")}</ul></details>` : ""}`;
+}
+
+function classReportHtml(txs, from, to) {
+  if (!students.length) return `<p class="empty">No students yet.</p>`;
+  const cell = (sid, code) => {
+    const list = txs.filter((t) => t.studentId === sid && (t.skills || []).includes(code));
+    const p = list.filter((t) => t.amount > 0).length, m = list.filter((t) => t.amount < 0).length;
+    if (!p && !m) return `<td class="num muted">–</td>`;
+    return `<td class="num">${p ? `<span class="plus">▲${p}</span>` : ""} ${m ? `<span class="minus">▼${m}</span>` : ""}</td>`;
+  };
+  return `
+    <div class="report-head">
+      <h2>${esc(settings.className)}: learning skills overview</h2>
+      <p class="muted small">${esc(rangeText(from, to))} · ▲ deposits, ▼ withdrawals tagged with each skill. Tap a name for details.</p>
+    </div>
+    <div class="table-wrap"><table class="overview">
+      <thead><tr><th>Student</th>${SKILLS.map((k) => `<th class="num" title="${esc(k.name)}"><span class="skill-dot" style="--sk:${k.color}"></span>${esc(k.short)}</th>`).join("")}</tr></thead>
+      <tbody>${students.map((s) => `<tr><td><button class="link" data-student="${esc(s.id)}">${esc(s.displayName)}</button></td>${SKILLS.map((k) => cell(s.id, k.code)).join("")}</tr>`).join("")}</tbody>
+    </table></div>`;
+}
+
+$("#skills-reference").innerHTML = SKILLS.map((k) => `
+  <div class="ref-skill" style="--sk:${k.color}"><h4>${esc(k.name)}</h4>
+  <ul>${k.behaviours.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div>`).join("");
 
 // ---------- CURRENCY LOGO ----------
 function renderLogo() {

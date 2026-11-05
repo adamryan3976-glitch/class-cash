@@ -1,6 +1,6 @@
 # Class Cash
 
-A paperless classroom economy for K–8 classes. Teachers manage their class bank from a laptop or phone; each student gets a private link that shows only their own balance.
+A paperless classroom economy for K–8 classes. Teachers manage their class bank from a laptop or phone; each student gets a private link that shows only their own balance. Each deposit or withdrawal can be tagged with Ontario's Learning Skills and Work Habits, so the history doubles as evidence for report card learning skills.
 
 - **Teachers** sign in with their @ddsb.ca Google account at one shared web address. There's nothing for them to install or set up.
 - **Classes can be shared.** The class owner adds other teachers (e.g. rotary teachers) by school email. They see the class the next time they sign in.
@@ -11,7 +11,8 @@ A paperless classroom economy for K–8 classes. Teachers manage their class ban
 
 | File | What it is |
 |---|---|
-| `index.html`, `js/teacher.js` | Teacher app: Bank, Students, History, Settings, Import |
+| `index.html`, `js/teacher.js` | Teacher app: Bank, Students, History, Skills, Settings, Import |
+| `js/skills.js` | The six Learning Skills and Work Habits and their sample behaviours |
 | `student.html`, `js/student.js` | Student balance page |
 | `js/sheet-import.js` | Import from the old Google Form/Sheet |
 | `js/util.js` | Shared helpers |
@@ -78,11 +79,16 @@ MS
 Students never type a username or password; their private link is all they need. The email just helps teachers keep track of who's who.
 For each student you can **Copy link** (paste it wherever your students get messages, e.g. Google Classroom or a bookmark on a class device) or **Preview**. Under **More** you can edit, **Reset link** (the old link stops working immediately) or, if you're the owner, delete the student. **Copy all links** copies a Name / Email / Link table you can paste into a private spreadsheet.
 
-**Bank tab**: tap students to select them (or **Select all** for the whole class), pick or type an amount, add an optional reason, then **Deposit** or **Withdraw**. Withdrawals are blocked if a student doesn't have enough, unless you allow negative balances in Settings.
+**Bank tab**: tap students to select them (or **Select all** for the whole class), pick or type an amount, optionally tap one or more **learning skills** (Responsibility, Organization, Independent Work, Collaboration, Initiative, Self-Regulation) and add an optional comment, then **Deposit** or **Withdraw**. Withdrawals are blocked if a student doesn't have enough, unless you allow negative balances in Settings. On a laptop, hovering over a skill shows its sample behaviours.
 
-**History tab**: every transaction, filterable by student. **Undo** removes a transaction and fixes the balance (on the student's page too).
+**Skills tab**: the learning skills report for report cards.
+- Choose a **student** and a date range (defaults to this school year) to see a summary per skill (how many deposits and withdrawals) followed by every tagged entry under each skill, with date, amount, comment and which teacher made it. Use **Print** for a clean copy.
+- Leave it on **Whole class overview** to see a table of every student × skill (▲ deposits, ▼ withdrawals). Tap a name for that student's details.
+- The sample behaviours for each skill (from the Ontario report card) are at the bottom for reference.
 
-**Settings tab**: class name, currency name (e.g. *Maple Bucks*, *Pesos*), symbol, quick-amount buttons, negative balances. The owner can also add a **currency logo**: any picture (PNG, JPG, GIF, WebP, SVG). It's shrunk automatically to a small image and shown on each student's balance page and next to balances on the Bank tab. At the end of the year the owner can **Delete class**.
+**History tab**: the latest 100 transactions, filterable by student, with their learning skill tags. **Undo** removes a transaction and fixes the balance (on the student's page too). For older entries, use the Skills tab.
+
+**Settings tab**: class name, currency name (e.g. *Maple Bucks*, *Pesos*), symbol, quick-amount buttons, negative balances, whether to **tag learning skills** at all (turn off for Kindergarten) and whether students **see the skill tags** on their balance page. The owner can also add a **currency logo**: any picture (PNG, JPG, GIF, WebP, SVG). It's shrunk automatically to a small image and shown on each student's balance page and next to balances on the Bank tab. At the end of the year the owner can **Delete class**.
 
 ### Moving over from the old Google Sheet
 1. Add your whole class on the Students tab first (whole-class deposits are given to everyone in the list).
@@ -103,8 +109,8 @@ For each student you can **Copy link** (paste it wherever your students get mess
 ```
 classes/{classId}                       settings, ownerUid, ownerEmail, memberEmails[] (teachers of the class)
 classes/{classId}/students/{id}         displayName, email (optional), token, balance (cents)
-classes/{classId}/transactions/{id}     studentId, amount (cents), note, t, group, by (teacher email), pub
-shares/{token}                          classId, displayName, balance, history[], currency/class name
+classes/{classId}/transactions/{id}     studentId, amount (cents), note, skills[] (R, O, IW, C, I, SR), t, group, by (teacher email), pub
+shares/{token}                          classId, displayName, balance, history[] ({a, n, t, s: skills}), currency/class name, showSkills
 logos/{classId}                         image (small data: URL, < 150 KB), updatedAt — readable by anyone, owner writes
 ```
 Teachers are matched by the email on their Google account (lower-cased), so add the exact address they sign in with.
