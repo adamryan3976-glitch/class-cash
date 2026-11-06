@@ -14,6 +14,7 @@ A paperless classroom economy for K–8 classes. Teachers manage their class ban
 | `index.html`, `js/teacher.js` | Teacher app: Bank, Students, History, Skills, Settings, Import |
 | `js/skills.js` | The six Learning Skills and Work Habits and their sample behaviours |
 | `student.html`, `js/student.js` | Student balance page |
+| `help.html` | Teacher guide, linked from the sign-in screen and the **? Help** button in the app |
 | `js/sheet-import.js` | Import from the old Google Form/Sheet |
 | `js/util.js` | Shared helpers |
 | `js/firebase-config.js` | **Your Firebase settings go here** |
@@ -54,6 +55,8 @@ In **Firestore Database → Rules → Rules Playground**, try these. Turn on *Au
 3. After a minute the app is live at `https://YOUR-GITHUB-USERNAME.github.io/REPO-NAME/`.
 
 ## Using it
+
+**Help**: the step-by-step teacher guide is at `help.html`. It's linked from the sign-in screen, the welcome screen, the **? Help** button in the top bar (opens in a new tab so teachers don't lose their place) and Settings → Account.
 
 **Classes**: the first time a teacher signs in, they tap **Create a class**. The menu at the top switches between classes and has **+ New class…**. Rotary teachers see every class they've been added to here, marked *(co-teacher)*.
 

@@ -14,6 +14,7 @@
   <header class="topbar">
     <div class="brand">🪙 <span>Class Cash</span></div>
     <div class="topbar-right">
+      <a class="help-btn" href="help.html" target="_blank" rel="noopener" title="Teacher guide (opens in a new tab)">?<span class="help-word"> Help</span></a>
       <img id="top-logo" class="top-logo" alt="" hidden>
       <select id="class-picker" class="class-picker" aria-label="Choose a class" hidden></select>
     </div>
@@ -26,6 +27,7 @@
     <p>A paperless classroom economy. Teachers sign in to manage their class bank.</p>
     <button id="signin" class="primary big">Sign in with Google</button>
     <p id="signin-error" class="error-text" hidden></p>
+    <a class="guide-link" href="help.html">📘 New to Class Cash? Read the teacher guide</a>
     <p class="muted small">Students: use the private link your teacher sent you.</p>
   </main>
 
@@ -35,6 +37,7 @@
       <h1>Welcome!</h1>
       <p>You're not in any classes yet.</p>
       <button id="create-first-class" class="primary big">Create a class</button>
+      <p><a class="guide-link" href="help.html" target="_blank" rel="noopener">📘 Read the teacher guide</a></p>
       <p class="muted small">Teaching rotary? Ask the homeroom teacher to add <strong class="my-email"></strong>
         on their Settings tab. Their class will appear here automatically.</p>
       <p><button class="link" onclick="document.querySelector('#signout').click()">Sign out</button></p>
@@ -206,6 +209,7 @@
       <div class="box">
         <h2>Account</h2>
         <p class="small">Signed in as <span class="my-email"></span></p>
+        <p class="small"><a href="help.html" target="_blank" rel="noopener">📘 Teacher guide</a>: step-by-step help for setting up and using Class Cash.</p>
         <button id="signout">Sign out</button>
       </div>
 
