@@ -15,6 +15,8 @@ A paperless classroom economy for K–8 classes. Teachers manage their class ban
 | `js/skills.js` | The six Learning Skills and Work Habits and their sample behaviours |
 | `student.html`, `js/student.js` | Student balance page |
 | `help.html` | Teacher guide, linked from the sign-in screen and the **? Help** button in the app |
+| `manifest.webmanifest`, `icons/` | App icon (the Class Cash coin) for browser tabs and phone home screens |
+| `js/app-icons.js` | Swaps the tab and home-screen icon to the class's custom logo when there is one |
 | `js/sheet-import.js` | Import from the old Google Form/Sheet |
 | `js/util.js` | Shared helpers |
 | `js/firebase-config.js` | **Your Firebase settings go here** |
@@ -57,6 +59,8 @@ In **Firestore Database → Rules → Rules Playground**, try these. Turn on *Au
 ## Using it
 
 **Help**: the step-by-step teacher guide is at `help.html`. It's linked from the sign-in screen, the welcome screen, the **? Help** button in the top bar (opens in a new tab so teachers don't lose their place) and Settings → Account.
+
+**App icon**: the tab icon and the icon on a phone's home screen (Safari → Share → *Add to Home Screen* on iPhone; Chrome → ⋮ → *Add to Home screen* on Android) is the Class Cash coin. If the class owner uploads a **currency logo**, both the teacher app and that class's student pages use the logo instead. A student's home-screen icon always opens their own private link. Phones save the icon when it's added, so anyone who added it before a logo change should remove it and add it again.
 
 **Classes**: the first time a teacher signs in, they tap **Create a class**. The menu at the top switches between classes and has **+ New class…**. Rotary teachers see every class they've been added to here, marked *(co-teacher)*.
 
