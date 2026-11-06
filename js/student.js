@@ -3,6 +3,7 @@ import { getFirestore, doc, onSnapshot, getDoc } from "https://www.gstatic.com/f
 import { firebaseConfig } from "./firebase-config.js";
 import { formatMoney, formatSigned, formatDate, formatDateTime, esc } from "./util.js";
 import { skillTags } from "./skills.js";
+import { setAppIcons } from "./app-icons.js";
 
 const $ = (sel) => document.querySelector(sel);
 const code = new URLSearchParams(location.search).get("k") || "";
@@ -15,6 +16,10 @@ function showError() {
 
 let db = null;
 let logoFor = null;   // classId whose logo we've loaded
+let logo = "";
+let iconName = "Class Cash";
+// The home-screen icon must open this student's own private link, so start_url = this exact address.
+const updateIcons = () => setAppIcons({ logo, name: iconName, startUrl: location.href });
 
 if (code.length < 20) {
   showError();
@@ -24,6 +29,8 @@ if (code.length < 20) {
     if (!snap.exists()) return showError();
     const d = snap.data();
     render(d);
+    iconName = d.currencyName || "Class Cash";
+    updateIcons();
     if (d.classId && d.classId !== logoFor) loadLogo(d.classId);
   }, showError);
 }
@@ -34,11 +41,14 @@ async function loadLogo(classId) {
     const snap = await getDoc(doc(db, "logos", classId));
     const img = $("#logo");
     if (snap.exists() && snap.data().image) {
-      img.src = snap.data().image;
+      logo = snap.data().image;
+      img.src = logo;
       img.hidden = false;
-      const link = document.querySelector("link[rel=icon]");
-      if (link) link.href = snap.data().image;
-    } else img.hidden = true;
+    } else {
+      logo = "";
+      img.hidden = true;
+    }
+    updateIcons();
   } catch (err) {
     console.warn("Couldn't load class logo", err);
   }

@@ -12,6 +12,7 @@ import {
 } from "./util.js";
 import { parseFormResponses, suggestMatch } from "./sheet-import.js";
 import { SKILLS, skillName, skillTags, schoolYearStart } from "./skills.js";
+import { setAppIcons } from "./app-icons.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -886,6 +887,8 @@ function renderLogo() {
   const top = $("#top-logo");
   top.hidden = !has;
   if (has) top.src = logo;
+  // Tab icon + phone home-screen icon follow the open class's logo (or the default coin).
+  setAppIcons({ logo, name: "Class Cash", startUrl: appLink(), staticManifest: "manifest.webmanifest" });
 }
 
 /** Shrink an image file to a small square-ish logo and return it as a data: URL (well under 150 KB). */
