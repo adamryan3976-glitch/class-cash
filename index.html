@@ -58,6 +58,15 @@
 
     <!-- BANK -->
     <section id="panel-bank" class="panel">
+      <div id="fm-box" class="box fm-box" hidden>
+        <div class="row-between">
+          <h2>👑 Finance Minister requests <span id="fm-count" class="muted"></span></h2>
+          <button id="fm-approve-all" class="small primary" data-act="approve-all">Approve all</button>
+        </div>
+        <p class="muted small">Tap learning skills on a request before approving it if you'd like to tag them, or approve without.</p>
+        <ul id="fm-list" class="fm-list"></ul>
+      </div>
+      <p id="fm-idle" class="fm-idle small muted" hidden></p>
       <div class="toolbar">
         <input id="bank-search" type="search" placeholder="Find a student…" aria-label="Find a student">
         <button id="select-all">Select all</button>
@@ -160,6 +169,17 @@
         <label class="check"><input id="set-skills" type="checkbox"> Tag deposits and withdrawals with learning skills
           <span class="muted small">(turn off for Kindergarten)</span></label>
         <label class="check"><input id="set-skills-students" type="checkbox"> Show learning skills on students' balance pages</label>
+        <fieldset class="fm-settings">
+          <legend>👑 Finance Minister</legend>
+          <label class="check"><input id="set-fm" type="checkbox"> Let one student be the Finance Minister</label>
+          <p class="muted small">The minister gets a panel on their own balance page with classmates' names (never balances) to
+            make deposits and withdrawals you ask for. Each one comes to you as a request to approve or reject.
+            Choose the minister with the 👑 button on the Students tab.</p>
+          <div id="fm-options">
+            <label>Most a minister can enter at once <input id="set-fm-max" type="number" min="1" step="1" inputmode="numeric" class="short"></label>
+            <label class="check"><input id="set-fm-auto" type="checkbox"> Approve minister requests automatically while a teacher has Class Cash open</label>
+          </div>
+        </fieldset>
         <button class="primary" type="submit">Save settings</button>
       </form>
 

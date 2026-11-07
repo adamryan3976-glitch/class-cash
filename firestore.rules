@@ -73,6 +73,28 @@ service cloud.firestore {
         allow read, create, delete: if isMember(classId);
         allow update: if false;
       }
+
+      // Finance Minister requests. The student who is the current minister can only CREATE requests,
+      // using the secret minister key shown on their own balance page; teachers approve or reject them.
+      // Switching ministers changes the key, so the previous minister's panel stops working.
+      match /fmRequests/{reqId} {
+        allow read, delete: if isMember(classId);
+        allow update: if false;
+        allow create: if classDoc(classId).get('fmEnabled', false) == true
+          && classDoc(classId).get('fmKey', '') != ''
+          && request.resource.data.keys().hasOnly(['key', 'studentId', 'amount', 'note', 't', 'ministerId', 'ministerName'])
+          && request.resource.data.key == classDoc(classId).fmKey
+          && request.resource.data.ministerId == classDoc(classId).get('fmStudentId', '')
+          && request.resource.data.studentId is string
+          && request.resource.data.amount is int
+          && request.resource.data.amount != 0
+          && math.abs(request.resource.data.amount) <= classDoc(classId).get('fmMax', 2000)
+          && request.resource.data.note is string
+          && request.resource.data.note.size() <= 80
+          && request.resource.data.ministerName is string
+          && request.resource.data.ministerName.size() <= 60
+          && request.resource.data.t is int;
+      }
     }
 
     // Class currency logo: a small image (resized in the browser) shown on student pages.

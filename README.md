@@ -73,6 +73,8 @@ In **Firestore Database → Rules → Rules Playground**, try these. Turn on *Au
 | Change class settings | ✓ | |
 | Add or remove teachers | ✓ | |
 | Delete students or the whole class | ✓ | |
+| Approve or reject Finance Minister requests | ✓ | ✓ |
+| Choose the Finance Minister | ✓ | |
 | Leave the class | | ✓ |
 
 The History tab shows which teacher made each transaction.
@@ -93,6 +95,8 @@ For each student you can **Copy link** (paste it wherever your students get mess
 - Leave it on **Whole class overview** to see a table of every student × skill (▲ deposits, ▼ withdrawals). Tap a name for that student's details.
 - The sample behaviours for each skill (from the Ontario report card) are at the bottom for reference.
 
+**Finance Minister** (optional, Settings → *Finance Minister*): one student at a time gets a panel on their own balance page with classmates' **names only** (never balances). They pick students, an amount (up to the teacher's limit) and a reason, then Deposit or Withdraw. They can include themselves. Each entry becomes a **request** at the top of the teacher's Bank tab, where any teacher of the class can tag learning skills (only teachers can) and **Approve**, **Reject** or **Approve all**. Optionally, requests are approved automatically while a teacher has Class Cash open. Withdrawals that would overdraw a student always wait for a teacher. The owner picks the minister with the 👑 button on the Students tab; switching gives the new minister a fresh key, so the previous minister's panel stops working immediately. Approved entries are marked 👑 with the minister's name in History, and *Finance Minister* on the student's page.
+
 **History tab**: the latest 100 transactions, filterable by student, with their learning skill tags. **Undo** removes a transaction and fixes the balance (on the student's page too). For older entries, use the Skills tab.
 
 **Settings tab**: class name, currency name (e.g. *Maple Bucks*, *Pesos*), symbol, quick-amount buttons, negative balances, whether to **tag learning skills** at all (turn off for Kindergarten) and whether students **see the skill tags** on their balance page. The owner can also add a **currency logo**: any picture (PNG, JPG, GIF, WebP, SVG). It's shrunk automatically to a small image and shown on each student's balance page and next to balances on the Bank tab. At the end of the year the owner can **Delete class**.
@@ -110,14 +114,16 @@ For each student you can **Copy link** (paste it wherever your students get mess
 - Student emails are optional and only visible to teachers of the class. Leave them blank if you'd rather not store them.
 - Class logos are not private: anyone with a student link can see that class's logo. Don't use photos of students.
 - Deleting a student removes their balance, history and link.
+- The Finance Minister's page lists classmates' display names (never balances, emails or history). If the minister's link is shared, use **Reset link** or choose a new minister.
 
 ## How the data is stored (for maintainers)
 
 ```
-classes/{classId}                       settings, ownerUid, ownerEmail, memberEmails[] (teachers of the class)
+classes/{classId}                       settings, ownerUid, ownerEmail, memberEmails[] (teachers of the class), fmEnabled, fmMax, fmAuto, fmStudentId, fmKey
 classes/{classId}/students/{id}         displayName, email (optional), token, balance (cents)
-classes/{classId}/transactions/{id}     studentId, amount (cents), note, skills[] (R, O, IW, C, I, SR), t, group, by (teacher email), pub
-shares/{token}                          classId, displayName, balance, history[] ({a, n, t, s: skills}), currency/class name, showSkills
+classes/{classId}/transactions/{id}     studentId, amount (cents), note, skills[] (R, O, IW, C, I, SR), t, group, by (teacher email), minister?, pub
+classes/{classId}/fmRequests/{id}       key, studentId, amount (cents), note, t, ministerId, ministerName (created by the minister's page, read/deleted by teachers)
+shares/{token}                          classId, displayName, balance, history[] ({a, n, t, s: skills, fm}), currency/class name, showSkills, fm? (minister only: key, me, roster of {id, n}, max)
 logos/{classId}                         image (small data: URL, < 150 KB), updatedAt — readable by anyone, owner writes
 ```
 Teachers are matched by the email on their Google account (lower-cased), so add the exact address they sign in with.

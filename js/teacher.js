@@ -4,7 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, where,
-  onSnapshot, writeBatch, increment, arrayUnion, arrayRemove, getDocs,
+  onSnapshot, writeBatch, increment, arrayUnion, arrayRemove, getDocs, runTransaction, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, ALLOWED_DOMAIN } from "./firebase-config.js";
 import {
@@ -26,6 +26,9 @@ const DEFAULT_SETTINGS = {
   allowNegative: false,
   useSkills: true,              // tag deposits/withdrawals with Ontario Learning Skills
   showSkillsToStudents: true,   // show those tags on student pages
+  fmEnabled: false,             // Finance Minister position
+  fmMax: 2000,                  // most a minister can enter in one request (cents)
+  fmAuto: false,                // auto-approve minister requests while a teacher has the app open
 };
 
 // ---------- state ----------
@@ -36,6 +39,9 @@ let settings = { ...DEFAULT_SETTINGS };
 let students = [];          // [{ id, displayName, email, token, balance }]
 let transactions = [];      // recent, newest first
 let logo = "";              // current class's currency logo (small data: URL) or ""
+let fmRequests = [];        // pending Finance Minister requests, oldest first
+const fmSkills = new Map(); // request id -> Set of skill codes the teacher tapped
+let rosterSynced = "";      // what we last wrote to the minister's page
 const selected = new Set();
 const selectedSkills = new Set();   // learning skill codes chosen for the next deposit/withdrawal
 let classesUnsub = null;
@@ -51,6 +57,7 @@ const studentsCol = () => collection(db, "classes", classId, "students");
 const txCol = () => collection(db, "classes", classId, "transactions");
 const shareRef = (token) => doc(db, "shares", token);
 const logoRef = (id = classId) => doc(db, "logos", id);
+const fmCol = () => collection(db, "classes", classId, "fmRequests");
 const byId = (id) => students.find((s) => s.id === id);
 const money = (c) => formatMoney(c, settings.symbol);
 const currentClass = () => classes.find((c) => c.id === classId);
@@ -234,6 +241,9 @@ function closeClass() {
   students = [];
   transactions = [];
   logo = "";
+  fmRequests = [];
+  fmSkills.clear();
+  rosterSynced = "";
   selected.clear();
   importData = null;
   renderLogo();
@@ -255,6 +265,13 @@ function openClass(id) {
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" }));
     for (const sid of [...selected]) if (!byId(sid)) selected.delete(sid);
     renderAll();
+    syncMinisterPage();
+  });
+  listen(thisClass, "Finance Minister requests", () => query(fmCol(), orderBy("t", "asc")), (snap) => {
+    fmRequests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    for (const id of [...fmSkills.keys()]) if (!fmRequests.some((r) => r.id === id)) fmSkills.delete(id);
+    renderFmRequests();
+    autoApprove();
   });
   listen(thisClass, "logo", () => logoRef(), (snap) => {
     logo = snap.exists() ? snap.data().image || "" : "";
@@ -295,6 +312,7 @@ $$(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.ta
 
 function renderAll() {
   renderBank();
+  renderFmRequests();
   renderStudents();
   renderHistoryFilter();
   renderHistory();
@@ -417,6 +435,10 @@ async function moveMoney(sign) {
  * Updates to the same student are combined.
  */
 async function applyTransactions(list) {
+  await commitOps(buildTransactionOps(list));
+}
+
+function buildTransactionOps(list) {
   const batchId = shortId();
   const ops = [];
   const perStudent = new Map();
@@ -427,10 +449,13 @@ async function applyTransactions(list) {
     const skills = tx.skills || [];
     const pub = { id: ref.id, a: tx.amount, n: tx.note || "", t: tx.t };
     if (skills.length) pub.s = skills;
-    ops.push((b) => b.set(ref, {
+    if (tx.minister) pub.fm = 1;
+    const record = {
       studentId: s.id, amount: tx.amount, note: tx.note || "", skills, t: tx.t, group: tx.group || "individual",
       batchId, pub, by: me.email,
-    }));
+    };
+    if (tx.minister) record.minister = tx.minister;
+    ops.push((b) => b.set(ref, record));
     const agg = perStudent.get(s.id) || { total: 0, pubs: [] };
     agg.total += tx.amount;
     agg.pubs.push(pub);
@@ -447,7 +472,7 @@ async function applyTransactions(list) {
       }));
     }
   }
-  await commitOps(ops);
+  return ops;
 }
 
 // ---------- STUDENTS ----------
@@ -494,11 +519,15 @@ function renderStudents() {
     return;
   }
   const owner = isOwner();
+  const fmId = ministerId();
   tbody.innerHTML = students.map((s) => `
-    <tr data-id="${esc(s.id)}">
-      <td><strong>${esc(s.displayName)}</strong><div class="muted small">${s.email ? esc(s.email) : ""}</div></td>
+    <tr data-id="${esc(s.id)}" class="${s.id === fmId ? "is-minister" : ""}">
+      <td><strong>${esc(s.displayName)}</strong>${s.id === fmId ? ` <span class="fm-badge">👑 Finance Minister</span>` : ""}
+        <div class="muted small">${s.email ? esc(s.email) : ""}</div></td>
       <td class="num">${esc(money(s.balance || 0))}</td>
       <td class="actions">
+        ${owner && settings.fmEnabled ? `<button class="small fm-btn ${s.id === fmId ? "on" : ""}" data-act="minister"
+          title="${s.id === fmId ? "Remove as Finance Minister" : "Make this student the Finance Minister"}">👑 ${s.id === fmId ? "Minister ✓" : "Make minister"}</button>` : ""}
         <button class="small" data-act="copy">Copy link</button>
         <button class="small" data-act="open">Preview</button>
         <details class="more"><summary class="small">More</summary>
@@ -523,6 +552,7 @@ $("#student-rows").addEventListener("click", async (e) => {
   if (act === "edit") return editStudent(s);
   if (act === "reset") return resetLink(s);
   if (act === "delete") return deleteStudent(s);
+  if (act === "minister") return chooseMinister(s.id === ministerId() ? null : s);
 });
 
 async function copyText(text, msg) {
@@ -573,6 +603,7 @@ async function deleteStudent(s) {
     const ops = txSnap.docs.map((d) => (b) => b.delete(d.ref));
     ops.push((b) => b.delete(shareRef(s.token)));
     ops.push((b) => b.delete(studentRef(s.id)));
+    if (currentClass()?.fmStudentId === s.id) ops.push((b) => b.update(classRef(), { fmStudentId: "", fmKey: "" }));
     await commitOps(ops);
     selected.delete(s.id);
   }, `Deleted ${s.displayName}`);
@@ -610,7 +641,7 @@ function renderHistory() {
       <td class="small">${esc(formatDateTime(t.t))}</td>
       <td>${s ? esc(s.displayName) : "<em>deleted</em>"}</td>
       <td class="num ${t.amount < 0 ? "minus" : "plus"}">${esc(formatSigned(t.amount, settings.symbol))}</td>
-      <td class="small">${esc(t.note)} ${skillTags(t.skills, esc)}${label[t.group] ? ` <span class="tag">${label[t.group]}</span>` : ""}</td>
+      <td class="small">${esc(t.note)} ${skillTags(t.skills, esc)}${label[t.group] ? ` <span class="tag">${label[t.group]}</span>` : ""}${t.minister ? ` <span class="tag fm-tag" title="Entered by the Finance Minister">👑 ${esc(t.minister)}</span>` : ""}</td>
       <td class="small muted" title="${esc(t.by || "")}">${esc(t.by === me.email ? "you" : shortEmail(t.by))}</td>
       <td><button class="small" data-act="undo" title="Delete this transaction">Undo</button></td>
     </tr>`;
@@ -646,6 +677,10 @@ function renderSettings() {
   $("#set-skills").checked = settings.useSkills !== false;
   $("#set-skills-students").checked = settings.showSkillsToStudents !== false;
   $("#set-skills-students").closest("label").hidden = settings.useSkills === false;
+  $("#set-fm").checked = !!settings.fmEnabled;
+  $("#set-fm-max").value = (settings.fmMax ?? 2000) / 100;
+  $("#set-fm-auto").checked = !!settings.fmAuto;
+  $("#fm-options").hidden = !settings.fmEnabled;
   $$("#settings-form input, #settings-form button, #logo-box input, #logo-box button").forEach((el) => (el.disabled = !owner));
   $("#settings-owner-note").hidden = owner;
   $("#delete-class-box").hidden = !owner;
@@ -653,6 +688,8 @@ function renderSettings() {
   renderQuickAmounts();
   renderSkillChips();
 }
+
+$("#set-fm").addEventListener("change", (e) => ($("#fm-options").hidden = !e.target.checked));
 
 $("#settings-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -665,6 +702,9 @@ $("#settings-form").addEventListener("submit", async (e) => {
     allowNegative: $("#set-negative").checked,
     useSkills: $("#set-skills").checked,
     showSkillsToStudents: $("#set-skills-students").checked,
+    fmEnabled: $("#set-fm").checked,
+    fmMax: Math.max(1, toCents($("#set-fm-max").value) || DEFAULT_SETTINGS.fmMax),
+    fmAuto: $("#set-fm-auto").checked,
   };
   if (!next.quickAmounts.length) next.quickAmounts = DEFAULT_SETTINGS.quickAmounts;
   await run(async () => {
@@ -678,10 +718,15 @@ $("#settings-form").addEventListener("submit", async (e) => {
         }));
       }
     }
+    // Finance Minister turned off: take the panel off the minister's page (the rules also stop new requests).
+    const m = byId(currentClass()?.fmStudentId);
+    if (m && settings.fmEnabled && !next.fmEnabled) ops.push((b) => b.update(shareRef(m.token), { fm: deleteField() }));
     await commitOps(ops);
     settings = { ...settings, ...next };
+    rosterSynced = "";
     renderSettings();
     renderAll();
+    syncMinisterPage();
   }, "Settings saved");
 });
 
@@ -760,6 +805,156 @@ $("#delete-class").addEventListener("click", async () => {
     showTab("bank");
   }, "Class deleted");
 });
+
+// ---------- FINANCE MINISTER ----------
+// One student (chosen by the class owner) gets a panel on their own balance page listing classmates' names (no
+// balances). Their entries arrive here as requests; a teacher approves (optionally tagging learning skills) or rejects.
+function ministerId() {
+  return settings.fmEnabled ? currentClass()?.fmStudentId || "" : "";
+}
+const rosterOf = () => students.map((s) => ({ id: s.id, n: s.displayName }));
+
+/** Keep the minister's panel (names, limit, key) up to date on their own share page. */
+async function syncMinisterPage() {
+  const c = currentClass();
+  const m = byId(ministerId());
+  if (!c || !m || !c.fmKey) return;
+  const fm = { key: c.fmKey, me: m.id, roster: rosterOf(), max: settings.fmMax ?? DEFAULT_SETTINGS.fmMax };
+  const k = JSON.stringify([m.token, fm]);
+  if (k === rosterSynced) return;
+  rosterSynced = k;
+  try {
+    await updateDoc(shareRef(m.token), { fm });
+  } catch (err) {
+    console.warn("Class Cash: couldn't update the Finance Minister's page", err);
+    rosterSynced = "";
+  }
+}
+
+async function chooseMinister(s) {
+  if (!isOwner()) return;
+  const c = currentClass();
+  const old = byId(c.fmStudentId);
+  const msg = s
+    ? `Make ${s.displayName} the Finance Minister?${old && old.id !== s.id ? `\n\n${old.displayName} will lose access right away.` : ""}\n\nA Finance Minister panel will appear on ${s.displayName}'s balance page.`
+    : `Remove ${old ? old.displayName : "this student"} as Finance Minister?`;
+  if (!confirm(msg)) return;
+  await run(async () => {
+    const key = s ? newToken() : "";   // a new key every time, so a previous minister can't keep sending requests
+    const ops = [(b) => b.update(classRef(), { fmStudentId: s ? s.id : "", fmKey: key })];
+    if (old && (!s || old.id !== s.id)) ops.push((b) => b.update(shareRef(old.token), { fm: deleteField() }));
+    if (s) ops.push((b) => b.update(shareRef(s.token), {
+      fm: { key, me: s.id, roster: rosterOf(), max: settings.fmMax ?? DEFAULT_SETTINGS.fmMax },
+    }));
+    await commitOps(ops);
+    rosterSynced = "";
+  }, s ? `${s.displayName} is now the Finance Minister 👑` : "Finance Minister removed");
+}
+
+function renderFmRequests() {
+  const box = $("#fm-box");
+  const show = !!classId && (settings.fmEnabled || fmRequests.length > 0);
+  box.hidden = !show || !fmRequests.length;
+  $("#fm-idle").hidden = !show || fmRequests.length > 0;
+  const m = byId(ministerId());
+  $("#fm-idle").innerHTML = m ? `👑 Finance Minister: <strong>${esc(m.displayName)}</strong>. Their requests will appear here.`
+    : `👑 No Finance Minister chosen yet${isOwner() ? ` (choose one on the <button class="link" data-goto="students">Students</button> tab)` : ""}.`;
+  if (!fmRequests.length) return;
+  $("#fm-count").textContent = `(${fmRequests.length})`;
+  const skillsOn = settings.useSkills !== false;
+  $("#fm-list").innerHTML = fmRequests.map((r) => {
+    const s = byId(r.studentId);
+    const chosen = fmSkills.get(r.id) || new Set();
+    const short = s && r.amount < 0 && !settings.allowNegative && (s.balance || 0) < -r.amount;
+    return `<li data-id="${esc(r.id)}" class="${short ? "warn" : ""}">
+      <div class="fm-line">
+        <strong>${s ? esc(s.displayName) : "<em>removed student</em>"}</strong>
+        <span class="num ${r.amount < 0 ? "minus" : "plus"}">${esc(formatSigned(r.amount, settings.symbol))}</span>
+        <span class="fm-note">${r.note ? esc(r.note) : `<span class="muted">no reason given</span>`}</span>
+        <span class="muted small">👑 ${esc(r.ministerName || "")} · ${esc(formatDateTime(r.t))}</span>
+      </div>
+      ${short ? `<div class="small error-text">Not enough ${esc(settings.currencyName)}: ${esc(s.displayName)} has ${esc(money(s.balance || 0))}.</div>` : ""}
+      <div class="fm-actions">
+        ${skillsOn ? `<div class="fm-skill-chips">${SKILLS.map((k) => `<button type="button" class="skill-chip mini ${chosen.has(k.code) ? "on" : ""}"
+          data-skill="${k.code}" style="--sk:${k.color}" title="${esc(k.name)}">${esc(k.short)}</button>`).join("")}</div>` : ""}
+        <span class="fm-buttons">
+          <button class="small primary" data-act="approve" ${!s || short ? "disabled" : ""}>Approve</button>
+          <button class="small" data-act="reject">Reject</button>
+        </span>
+      </div>
+    </li>`;
+  }).join("");
+}
+
+$("#fm-box").addEventListener("click", async (e) => {
+  const li = e.target.closest("li[data-id]");
+  const chip = e.target.closest("[data-skill]");
+  if (li && chip) {
+    const set = fmSkills.get(li.dataset.id) || new Set();
+    set.has(chip.dataset.skill) ? set.delete(chip.dataset.skill) : set.add(chip.dataset.skill);
+    fmSkills.set(li.dataset.id, set);
+    return renderFmRequests();
+  }
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  if (btn.id === "fm-approve-all") return approveRequests(fmRequests, true);
+  const r = fmRequests.find((x) => x.id === li?.dataset.id);
+  if (!r) return;
+  if (btn.dataset.act === "approve") return approveRequests([r], true);
+  if (btn.dataset.act === "reject") {
+    await run(() => commitOps([(b) => b.delete(doc(fmCol(), r.id))]), "Request rejected");
+  }
+});
+$("#fm-idle").addEventListener("click", (e) => { const go = e.target.closest("[data-goto]"); if (go) showTab(go.dataset.goto); });
+
+/**
+ * Approve requests one at a time. Each approval is a Firestore transaction that first checks the request still
+ * exists, so two teachers (or auto-approve on two devices) can never apply the same request twice.
+ */
+async function approveRequests(list, manual) {
+  const order = SKILLS.map((k) => k.code);
+  const running = new Map(students.map((s) => [s.id, s.balance || 0]));
+  let done = 0, skipped = 0;
+  const work = async () => {
+    for (const r of list) {
+      const s = byId(r.studentId);
+      if (!s) { skipped++; continue; }
+      const bal = running.get(s.id) || 0;
+      if (r.amount < 0 && !settings.allowNegative && bal < -r.amount) { skipped++; continue; }
+      const skills = settings.useSkills !== false ? order.filter((c) => fmSkills.get(r.id)?.has(c)) : [];
+      const reqRef = doc(fmCol(), r.id);
+      const ops = buildTransactionOps([{ studentId: s.id, amount: r.amount, note: r.note || "", skills,
+        t: Date.now(), group: "individual", minister: r.ministerName || "Finance Minister" }]);
+      const applied = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(reqRef);
+        if (!snap.exists()) return false;          // someone else already approved or rejected it
+        ops.forEach((op) => op(tx));
+        tx.delete(reqRef);
+        return true;
+      });
+      if (applied) { done++; running.set(s.id, bal + r.amount); fmSkills.delete(r.id); }
+    }
+  };
+  if (manual) {
+    await run(work, () => skipped ? `Approved ${done}. ${skipped} need${skipped === 1 ? "s" : ""} a look (not enough money or student removed).`
+      : `Approved ${done} request${done === 1 ? "" : "s"}`);
+  } else {
+    try { await work(); } catch (err) { console.warn("Class Cash: auto-approve failed", err); }
+    if (done) toast(`Auto-approved ${done} Finance Minister request${done === 1 ? "" : "s"}`);
+  }
+}
+
+let autoBusy = false;
+const autoTried = new Set();   // requests auto-approve already attempted (e.g. not enough money: left for a teacher)
+async function autoApprove() {
+  if (!settings.fmEnabled || !settings.fmAuto || autoBusy) return;
+  const todo = fmRequests.filter((r) => !autoTried.has(r.id));
+  if (!todo.length) return;
+  autoBusy = true;
+  todo.forEach((r) => autoTried.add(r.id));
+  try { await approveRequests(todo, false); } finally { autoBusy = false; }
+  setTimeout(autoApprove, 0);   // pick up anything that arrived while we were busy
+}
 
 // ---------- SKILLS REPORT ----------
 // Reads the full transaction log for the chosen dates (the History tab only keeps the latest 100).
